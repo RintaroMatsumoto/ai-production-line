@@ -41,6 +41,15 @@ stops — it does not continue with output that merely *looks* successful.
 | Render, 3 machines | **11.2–12.7 min** |
 | Gate pass rate | **95%** (19/20 rubric) |
 
+## What this demonstrates
+
+| Area | Content |
+|---|---|
+| **Distributed systems** | Split one video across machines, cut on meaningful boundaries, verify, then concatenate |
+| **Verification design** | Gates that fail when they should, closing off the failure modes of automation |
+| **Performance tuning** | Quantization and memory placement tuned by measurement under a 12GB constraint |
+| **Documentation** | Decisions and failures written so that six-months-later-me can act on them |
+
 ## Three technical highlights
 
 **1. A 125B MoE model at 256K context on a 12GB GPU.**
