@@ -81,7 +81,7 @@ class Plan:
 def load_config(path: Path | None) -> dict:
     if path is None:
         return {}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     return data.get("stages") or {}
 
 

@@ -4,14 +4,14 @@
 
 Generated SVG/HTML looks fine in isolation and breaks on the canvas: text
 overflows the edge, or the figure drifts away from center. Text width depends
-on the font, so it cannot be predicted at generation time — it has to be
+on the font, so it cannot be predicted at generation time 窶・it has to be
 measured after rendering.
 
 This gate consumes measured bounding boxes and checks:
 
-  * overflow   — no element may extend outside the canvas
-  * centering  — the union box center must sit within ±tolerance px
-  * coverage   — a scene must contain at least one visual
+  * overflow   窶・no element may extend outside the canvas
+  * centering  窶・the union box center must sit within ﾂｱtolerance px
+  * coverage   窶・a scene must contain at least one visual
 
 Usage:
     python -m src.pipeline.gates.visual_layout samples/layout.example.json
@@ -76,7 +76,7 @@ def evaluate(layout: dict, tolerance: float = DEFAULT_TOLERANCE) -> dict:
     if abs(dx) > tolerance or abs(dy) > tolerance:
         problems.append(
             f"figure is off-center by ({dx:+.1f}, {dy:+.1f}) px "
-            f"(tolerance ±{tolerance:g})")
+            f"(tolerance ﾂｱ{tolerance:g})")
 
     return {
         "ok": not problems,
@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     try:
-        layout = json.loads(args.layout.read_text(encoding="utf-8"))
+        layout = json.loads(args.layout.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         print(f"[ng] cannot read layout: {exc}", file=sys.stderr)
         return EXIT_USAGE

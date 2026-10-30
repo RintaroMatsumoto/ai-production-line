@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: End-to-end demo
+        run: |
+          set -e
+          python samples/make_demo_audio.py
+          python -m src.pipeline.distribute \
+            --frames 1074 \
+            --weights m1=0.42,local=0.29,m2=0.29 \
+            --scene-json samples/scenes.example.json
+          python -m src.pipeline.gates.audio_freshness \
+            --scenes samples/scenes.example.json --audio-dir samples/audio
+          python -m src.pipeline.gates.visual_layout samples/layout.example.json
+          python -m src.pipeline.orchestrator \
+            --unit DEMO-01 --config samples/config.example.json --dry-run
+
+      - name: Verify the freshness gate rejects stale audio
+        run: |
+          set -e
+          python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("samples/scenes.example.json")
+          data = json.loads(p.read_text(encoding="utf-8"))
+          data["scenes"][2]["text"] = "この一文だけ差し替えたのだ。"
+          p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+          PY
+          if python -m src.pipeline.gates.audio_freshness \
+               --scenes samples/scenes.example.json --audio-dir samples/audio; then
+            echo "::error::gate accepted stale audio"
+            exit 1
+          else
+            echo "gate correctly rejected the stale WAV"
+          fi

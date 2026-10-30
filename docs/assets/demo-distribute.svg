@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="440" viewBox="0 0 1120 440" role="img" aria-label="distribute.py output">
+  <defs>
+    <style>
+      .bg { fill: #0d1117; }
+      .bar { fill: #161b22; }
+      .t { font-family: SFMono-Regular, Consolas, Menlo, "Noto Sans JP", monospace; font-size: 15px; fill: #c9d1d9; white-space: pre; }
+      .dim { fill: #8b949e; }
+      .ok { fill: #3fb950; }
+      .accent { fill: #79c0ff; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="440" rx="10"/>
+  <path class="bar" d="M0 10a10 10 0 0 1 10-10h1100a10 10 0 0 1 10 10v30H0z"/>
+  <circle cx="24" cy="20" r="6" fill="#ff5f56"/>
+  <circle cx="44" cy="20" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="20" r="6" fill="#27c93f"/>
+  <text class="t dim" x="560" y="25" text-anchor="middle">distribute.py — frame plan</text>
+
+  <text class="t" x="28" y="86"><tspan class="dim">$ </tspan>python -m src.pipeline.distribute --frames 1074 \</text>
+  <text class="t" x="28" y="112">    --weights m1=0.42,local=0.29,m2=0.29 \</text>
+  <text class="t" x="28" y="138">    --scene-json samples/scenes.example.json</text>
+
+  <text class="t" x="28" y="186">total frames: 1074  (35.80s @ 30fps)</text>
+  <text class="t" x="28" y="218">machine       start      end   frames      sec   share</text>
+  <text class="t" x="28" y="244">m1                0      374      375     12.5   34.9%</text>
+  <text class="t" x="28" y="270">local           375      809      435     14.5   40.5%</text>
+  <text class="t" x="28" y="296">m2              810     1073      264      8.8   24.6%</text>
+
+  <text class="t ok" x="28" y="344">[ok] plan is contiguous and complete</text>
+
+  <text class="t dim" x="28" y="392">split points are snapped to scene boundaries; a validation pass proves</text>
+  <text class="t dim" x="28" y="414">the shards cover the timeline with no gaps or overlaps.</text>
+</svg>

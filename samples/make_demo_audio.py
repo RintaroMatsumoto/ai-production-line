@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rate", type=int, default=24000)
     args = ap.parse_args(argv)
 
-    data = json.loads(args.texts.read_text(encoding="utf-8"))
+    data = json.loads(args.texts.read_text(encoding="utf-8-sig"))
     fps = int(data.get("fps") or 30)
     speaker_default = data.get("speaker_default") or "speaker"
     args.audio_dir.mkdir(parents=True, exist_ok=True)

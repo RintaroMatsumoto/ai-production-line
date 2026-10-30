@@ -6,6 +6,11 @@ A 16-stage pipeline that goes from script generation to rendering, quality
 gating and publishing, distributing renders across 2–3 GPU machines to produce
 a 20-minute explainer video in **11–16 minutes**.
 
+[![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-success)](requirements.txt)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 [日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Benchmarks](docs/05-benchmarks.md) · [Lessons](docs/06-lessons.md)
 
 ---
@@ -48,11 +53,15 @@ Frame ranges are split by measured throughput ratio, but split points are
 forced onto scene starts. Splitting mid-line produces a broken concat with exit
 code 0; snapping plus a ±0.2s duration check eliminates it.
 
+![distribute](docs/assets/demo-distribute.svg)
+
 **3. Gates that detect stale artifacts.**
 The worst failure mode in automation is not a crash — it is an old file that
 looks new. Audio files carry a SHA256 fingerprint of the text, speaker and
 synthesis parameters, so a render cannot proceed when the script changed but
 the audio did not.
+
+![gate](docs/assets/demo-gate.svg)
 
 ## Repository layout
 

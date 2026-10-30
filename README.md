@@ -5,6 +5,12 @@
 台本生成から映像レンダリング、品質検査、公開までを16ステージで自動化し、
 2〜3台のGPUマシンに処理を分散させて1本あたり **11〜16分** で書き出す個人開発プロジェクトです。
 
+[![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-success)](requirements.txt)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-31-brightgreen)](tests/)
+
 [English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [実測値](docs/05-benchmarks.md) · [失敗と対策](docs/06-lessons.md)
 
 ---
@@ -61,6 +67,8 @@ VRAM 12GBのコンシューマGPU上に **256Kコンテキスト / 10.8 t/s** �
 - 結合後に **尺を実測検証**（期待値 ±0.2秒）
 - 継ぎ目16フレームのMD5がマシン間で完全一致することを確認済み
 
+![distribute](docs/assets/demo-distribute.svg)
+
 ### 3. 「古い成果物」を検出するゲート
 
 自動化で最も危険なのは、**失敗ではなく「成功したように見える古い出力」**です。
@@ -72,6 +80,8 @@ VRAM 12GBのコンシューマGPU上に **256Kコンテキスト / 10.8 t/s** �
 対策として、シーン・読み辞書・合成パラメータから**指紋（SHA256）**を計算し、
 実在するWAVの指紋と突合する `audio_freshness` ゲートを実装しました。
 レンダ前に必ず落ちるため、同種の事故は再発していません。
+
+![gate](docs/assets/demo-gate.svg)
 
 ## アーキテクチャ
 

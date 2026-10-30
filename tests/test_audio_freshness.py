@@ -78,6 +78,15 @@ class AudioFreshnessTest(unittest.TestCase):
         self.assertNotEqual(fingerprint("a", "zun", PARAMS),
                             fingerprint("a", "metan", PARAMS))
 
+    def test_reads_utf8_bom(self):
+        """Windows editors commonly save JSON with a BOM; do not crash on it."""
+        write_scenes(self.scenes, [{"id": 1, "speaker": "zun", "text": "a"}])
+        write_audio(self.audio, "zun", 1, "a")
+        raw = self.scenes.read_bytes()
+        self.scenes.write_bytes(b"\xef\xbb\xbf" + raw)
+        result = check(self.scenes, self.audio, PARAMS)
+        self.assertTrue(result["ok"], result)
+
 
 if __name__ == "__main__":
     unittest.main()

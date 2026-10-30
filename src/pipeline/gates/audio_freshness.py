@@ -51,7 +51,7 @@ def audio_path(audio_dir: Path, speaker: str, scene_id: int) -> Path:
 
 
 def check(scenes_path: Path, audio_dir: Path, params: dict) -> dict:
-    data = json.loads(scenes_path.read_text(encoding="utf-8"))
+    data = json.loads(scenes_path.read_text(encoding="utf-8-sig"))
     scenes = data.get("scenes") or []
     speaker_default = data.get("speaker_default") or "speaker"
 
@@ -72,7 +72,7 @@ def check(scenes_path: Path, audio_dir: Path, params: dict) -> dict:
 
         sidecar = wav.with_name(wav.name + ".fp")
         current = fingerprint(text, speaker, params)
-        stored = sidecar.read_text(encoding="utf-8").strip() if sidecar.exists() else None
+        stored = sidecar.read_text(encoding="utf-8-sig").strip() if sidecar.exists() else None
 
         if stored is None:
             stale.append({**entry, "reason": "no fingerprint"})

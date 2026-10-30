@@ -147,7 +147,7 @@ def validate(shards: list[dict], total_frames: int) -> list[str]:
 
 def load_scene_starts(path: Path) -> tuple[list[int], int]:
     """Read scene starts from a scene JSON. Returns (starts, fps)."""
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     fps = int(data.get("fps") or 30)
     gap_frames = int(round(float(data.get("gap_sec") or 0.5) * fps))
     starts = [0]
