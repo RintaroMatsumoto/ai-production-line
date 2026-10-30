@@ -1,0 +1,9 @@
+# No runtime dependencies.
+#
+# Everything here uses the Python standard library (unittest, urllib, json,
+# wave, hashlib). The LLM benchmark talks to any OpenAI-compatible server over
+# HTTP, so no SDK is required.
+#
+# Optional, if you want to extend the tooling:
+#   pytest>=8
+#   PyYAML>=6

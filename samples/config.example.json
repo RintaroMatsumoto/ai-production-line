@@ -1,0 +1,12 @@
+{
+  "_comment": "Stage commands for src/pipeline/orchestrator.py. {unit} is substituted. Leave a stage out (or set cmd to null) to mark it as not configured in this public edition.",
+  "stages": {
+    "script": { "cmd": ["python", "tools/make_script.py", "{unit}"] },
+    "quality": { "cmd": ["python", "tools/qa_script.py", "{unit}"] },
+    "scene": { "cmd": ["python", "tools/make_scene.py", "{unit}"] },
+    "visuals": { "cmd": ["python", "tools/plan_visuals.py", "{unit}"] },
+    "audio": { "cmd": ["python", "tools/synthesize.py", "{unit}"] },
+    "render": { "cmd": ["python", "tools/render.py", "{unit}"] },
+    "qa": { "cmd": ["python", "tools/qa_video.py", "{unit}"] }
+  }
+}
