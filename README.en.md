@@ -114,5 +114,5 @@ Code: [MIT](LICENSE). Documentation: CC BY 4.0.
 ---
 
 **Rintaro Matsumoto** — 22 years in the Japan Ground Self-Defense Force working
-on communications infrastructure and large-scale simulation systems. Currently
+on communications infrastructure and combat simulation systems. Currently
 building AI-driven content production infrastructure.
