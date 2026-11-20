@@ -1,10 +1,11 @@
 # AI Production Line
 
-**ローカルのGPUだけで完結する、生成メディアの制作基盤。**
+**重い生成はローカル、軽い推論はクラウド。処理ごとに置き場所を選ぶ制作基盤。**
 
-ComfyUI（Docker）による画像・動画生成、ローカルLLM、音声合成、レンダリング、
-配信レイヤ、運用ダッシュボードまでを**1つのリポジトリ**にまとめた個人開発です。
-外部の生成APIに依存せず、素材もモデルも出力も、すべて手元のマシンの中で完結します。
+ComfyUI（Docker）による画像・動画生成、音声合成、レンダリング、配信レイヤ、
+運用ダッシュボードを**1つのリポジトリ**にまとめた個人開発です。
+画像・動画・音声の生成は外部APIを使わず、すべて手元のGPUで完結します。
+一方でテキスト生成は、品質とコストのバランスからクラウドLLMも併用しています。
 
 [![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -15,17 +16,25 @@ ComfyUI（Docker）による画像・動画生成、ローカルLLM、音声合�
 
 > **作った人**：松本 倫太郎。陸上自衛隊で22年間、通信インフラと戦闘シミュレーションシステムの開発に従事。IT実務24年。
 
-## なぜローカルなのか
+## 処理の置き場所
 
-クラウドの生成APIは便利ですが、次の3点で制作基盤には向きません。
+「全部ローカル」でも「全部クラウド」でもありません。**特性で分けています。**
 
-| 制約 | ローカル構成での解決 |
-|---|---|
-| 従量課金。試行回数がそのままコストになる | 電気代だけ。何千回試しても単価が変わらない |
-| レート制限と待ち時間。並列化できない | 2台のGPUを好きなだけ回せる |
-| 素材と出力が外部に渡る | データがマシンの外に出ない |
+| 処理 | 実行場所 | 理由 |
+|---|---|---|
+| 画像生成 | **ローカル**（ComfyUI / Docker） | 試行回数が多く、従量課金だと費用が読めない |
+| 動画生成 | **ローカル** | 同上。素材を外に出さずに済む |
+| LoRA学習 | **ローカル** | モデルとデータが大きく、転送が現実的でない |
+| 音声合成 | **ローカル**（VOICEVOX） | 低遅延・無料・オフラインで動く |
+| 映像合成 | **ローカル**（Remotion） | 素材の受け渡しがボトルネックになる |
+| テキスト生成（設計・執筆） | **クラウドLLM** | 12GBのGPUでは品質が届かない。判断の質が成果物を決める |
+| テキスト生成（大量の下処理） | **クラウドLLM（安価）** | 単価重視。ローカルで回すより速く安い |
+| ローカルLLM | **ローカル**（llama.cpp） | 機密性の高い処理と、外部障害時の代替系として保持 |
+| 配信 | 静的ホスティング | サーバー運用を持たないため |
+| 素材収集 | 外部ソース | 一次情報を取りに行く必要がある |
 
-この基盤は、**試行錯誤の回数をコストから切り離す**ことを目的に組んでいます。
+**生成のコストが支配的な部分をローカルに置く**のが、この構成の要点です。
+テキストは回数が限られ、品質がそのまま成果物の質になるため、クラウドの上位モデルに任せています。
 
 ## スタック
 
@@ -34,7 +43,8 @@ ComfyUI（Docker）による画像・動画生成、ローカルLLM、音声合�
 | 画像・動画生成 | **ComfyUI（Docker / ai-dock base）**、SDXL、Flux、Wan 2.2、AnimateDiff |
 | 一貫性 | LoRA（kohya_ss）、IP-Adapter FaceID、ControlNet、ReActor |
 | 後処理 | Real-ESRGAN、RIFE フレーム補間、LivePortrait / SadTalker / Wav2Lip |
-| LLM | llama.cpp（125B MoE / 256K context / 12GB VRAM） |
+| LLM（ローカル） | llama.cpp（125B MoE / 256K context / 12GB VRAM） |
+| LLM（クラウド） | Gemini、DeepSeek（テキスト生成・下処理） |
 | 音声 | VOICEVOX（ローカルHTTP） |
 | 映像合成 | Remotion（React → MP4） |
 | オーケストレーション | Python（標準ライブラリのみ） |
@@ -51,9 +61,9 @@ ComfyUI（Docker）による画像・動画生成、ローカルLLM、音声合�
 | 動画生成 | **約5秒/クリップ** | RTX 3080 / Wan 2.2 TI2V 5B / 832×480 |
 | 動画生成 | 約10秒/クリップ | RTX 3060 / 同モデル |
 | LoRA訓練 | 2.40 s/it | RTX 3060 / SDXL / kohya_ss |
-| LLM推論 | 10.8 t/s @ 256K context | RTX 3060 / 125B MoE |
+| ローカルLLM推論 | 10.8 t/s @ 256K context | RTX 3060 / 125B MoE |
 | 映像レンダ | 2台並列（concurrency 4 / 6） | Remotion |
-| 外部生成API | **0** | すべてローカル |
+| 画像・動画・音声の外部API | **0** | すべてローカル |
 
 ## 3つの技術的ハイライト
 
@@ -121,7 +131,12 @@ py パイプライン/line4_video/watch_video.py --machine m1
 
 ```mermaid
 flowchart TB
-  subgraph LOCAL["Local machine（外部APIなし）"]
+  subgraph CLOUD["Cloud LLM（テキストのみ）"]
+    G["Gemini"]
+    DS["DeepSeek"]
+  end
+
+  subgraph LOCAL["Local machines（画像・動画・音声）"]
     subgraph GEN["Generation"]
       C["ComfyUI<br/>Docker + GPU"]
       L["llama.cpp<br/>local LLM"]
@@ -140,9 +155,12 @@ flowchart TB
     BI["Local BI"]
   end
 
+  G --> A1
+  DS --> A1
+  G --> B1
+  DS --> C1
   C --> D1
   L --> A2
-  L --> B1
   V --> D1
   D1 --> R
   B1 --> S
@@ -158,7 +176,7 @@ flowchart TB
 ```
 .
 ├── docs/
-│   ├── 01-architecture.md      ローカル完結の設計と4ライン
+│   ├── 01-architecture.md      処理の置き場所と4ライン
 │   ├── 02-local-llm.md         ローカルLLM（量子化・KV・スループット）
 │   ├── 03-video-pipeline.md    ComfyUI / Wan 2.2 / LoRA / レンダ
 │   ├── 04-quality-gates.md     機械チェックとライセンスガード

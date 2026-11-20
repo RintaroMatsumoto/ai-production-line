@@ -1,10 +1,11 @@
 # AI Production Line
 
-**A generative media stack that runs entirely on local GPUs.**
+**Heavy generation on local GPUs, lightweight inference in the cloud. Each step is placed where it belongs.**
 
-Image and video generation with ComfyUI in Docker, a local LLM, speech synthesis,
-rendering, a delivery layer and an operations dashboard — in one repository.
-No external generation API. Models, inputs and outputs stay on the machines.
+Image and video generation with ComfyUI in Docker, speech synthesis, rendering,
+a delivery layer and an operations dashboard — in one repository.
+Images, video and speech never touch an external generation API.
+Text generation does use cloud models, because that is where the quality is.
 
 [![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -13,17 +14,25 @@ No external generation API. Models, inputs and outputs stay on the machines.
 
 [日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Generation](docs/03-video-pipeline.md) · [Delivery](docs/07-website.md) · [BI](docs/08-bi-dashboard.md)
 
-## Why local
+## Where each step runs
 
-Cloud generation APIs are convenient, but they are a poor foundation for a production line:
+Neither "everything local" nor "everything in the cloud" — the split follows the workload.
 
-| Constraint | What local buys you |
-|---|---|
-| Per-call pricing | Electricity only — thousands of attempts cost the same |
-| Rate limits and queueing | Two GPUs you can saturate whenever you want |
-| Inputs and outputs leave your machine | Nothing leaves the box |
+| Step | Runs on | Why |
+|---|---|---|
+| Image generation | **Local** (ComfyUI / Docker) | Many attempts; per-call pricing makes cost unpredictable |
+| Video generation | **Local** | Same, plus inputs stay on the machine |
+| LoRA training | **Local** | Models and datasets are too large to move |
+| Speech synthesis | **Local** (VOICEVOX) | Low latency, free, works offline |
+| Video assembly | **Local** (Remotion) | Asset transfer would dominate |
+| Text generation (design, writing) | **Cloud LLM** | 12GB of VRAM cannot reach the quality that decides the output |
+| Text generation (bulk preprocessing) | **Cloud LLM (cheap)** | Unit price matters; faster and cheaper than local |
+| Local LLM | **Local** (llama.cpp) | Sensitive work, and a fallback if the cloud is unavailable |
+| Delivery | Static hosting | No servers to operate |
+| Source collection | External sources | Primary material has to be fetched |
 
-The point of this stack is to **decouple the number of attempts from cost**.
+The rule is simple: **the steps whose cost scales with attempts stay local.**
+Text is low-volume and its quality sets the quality of everything downstream, so it goes to frontier models.
 
 ## Stack
 
@@ -32,7 +41,8 @@ The point of this stack is to **decouple the number of attempts from cost**.
 | Image / video generation | **ComfyUI in Docker** (ai-dock base), SDXL, Flux, Wan 2.2, AnimateDiff |
 | Consistency | LoRA (kohya_ss), IP-Adapter FaceID, ControlNet, ReActor |
 | Post-processing | Real-ESRGAN, RIFE frame interpolation, LivePortrait / SadTalker / Wav2Lip |
-| LLM | llama.cpp (125B MoE, 256K context, 12GB VRAM) |
+| LLM (local) | llama.cpp (125B MoE, 256K context, 12GB VRAM) |
+| LLM (cloud) | Gemini, DeepSeek (text and bulk preprocessing) |
 | Speech | VOICEVOX (local HTTP) |
 | Video assembly | Remotion (React → MP4) |
 | Orchestration | Python (standard library only) |
@@ -49,9 +59,9 @@ The point of this stack is to **decouple the number of attempts from cost**.
 | Video generation | **~5 s / clip** | RTX 3080, Wan 2.2 TI2V 5B, 832×480 |
 | Video generation | ~10 s / clip | RTX 3060, same model |
 | LoRA training | 2.40 s/it | RTX 3060, SDXL, kohya_ss |
-| LLM inference | 10.8 t/s @ 256K context | RTX 3060, 125B MoE |
+| Local LLM inference | 10.8 t/s @ 256K context | RTX 3060, 125B MoE |
 | Video render | 2 machines in parallel | Remotion |
-| External generation APIs | **0** | everything local |
+| External APIs for image/video/speech | **0** | all local |
 
 ## Three highlights
 
@@ -73,7 +83,11 @@ shows per-stage progress, line health, cost and failures.
 
 ```mermaid
 flowchart TB
-  subgraph LOCAL["Local machine (no external APIs)"]
+  subgraph CLOUD["Cloud LLM (text only)"]
+    G["Gemini"]
+    DS["DeepSeek"]
+  end
+  subgraph LOCAL["Local machines (image / video / speech)"]
     subgraph GEN["Generation"]
       C["ComfyUI<br/>Docker + GPU"]
       L["llama.cpp<br/>local LLM"]
@@ -89,9 +103,12 @@ flowchart TB
     S["Static SPA + PWA"]
     BI["Local BI"]
   end
+  G --> A1
+  DS --> A1
+  G --> B1
+  DS --> C1
   C --> D1
   L --> A2
-  L --> B1
   V --> D1
   D1 --> R
   B1 --> S
