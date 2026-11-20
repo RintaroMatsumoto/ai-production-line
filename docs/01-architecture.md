@@ -13,22 +13,31 @@
 
 ```mermaid
 flowchart LR
-  CL["クラウドLLM<br/>Gemini / DeepSeek"] --> L1
   subgraph LOCAL["ローカル"]
     subgraph GEN["生成（ローカル）"]
       C["ComfyUI<br/>Docker / GPU"]
       V["VOICEVOX"]
     end
     subgraph PIPE["4ライン"]
-      L1["collect"] --> L2["structure"]
-      L1 --> L3["script"]
-      L3 --> L4["render"]
+      L1["collect"]
+      L2["structure"]
+      L3["script"]
+      L4["render"]
     end
-    L2 --> S["配信（SPA+PWA）"]
-    L4 --> R["レンダ farm"]
-    L1 --> BI["BI"]
-    L4 --> BI
+    S["配信（SPA+PWA）"]
+    R["レンダ farm"]
+    BI["BI"]
   end
+  CL["クラウドLLM<br/>Gemini / DeepSeek"]
+
+  CL --> L1
+  L1 --> L2
+  L1 --> L3
+  L3 --> L4
+  L2 --> S
+  L4 --> R
+  L1 --> BI
+  L4 --> BI
   C --> L4
   V --> L4
 ```
