@@ -114,4 +114,6 @@ $ python -m src.pipeline.gates.audio_freshness \
   [ng] scene 003 a fingerprint mismatch: この一文だけ差し替えたのだ。
 ```
 
+![gate](assets/demo-gate.svg)
+
 再生成は1コマンドです。
