@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 """Progress from file existence — the same metric the BI dashboard shows.
 
-Six stages: pack / text / test / script / video / youtube.
+Six stages: pack / text / test / script / video / publish.
 
-    average = (sum of stage counts) / (6 * lessons) * 100
+    average = (sum of stage counts) / (6 * units) * 100
 
-A lesson reaches 100% only when its video is rendered *and* published.
-"4-point set" (pack + text + test + script) is deliberately not the same thing.
+A unit reaches 100% only when its video is rendered *and* published.
+"intermediate complete" (pack + text + test + script) is deliberately not the same thing.
 
 Usage:
     python -m src.pipeline.progress --root samples/lessons

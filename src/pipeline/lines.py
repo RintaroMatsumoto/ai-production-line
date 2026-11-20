@@ -51,8 +51,8 @@ class Line:
 
 
 LINES: dict[str, Line] = {
-    "line1": Line("資料収集＆蒸留", "collect and distil source material", (), ("pack.json",)),
-    "line2": Line("教材", "web textbook, test and figures", ("pack.json",),
+    "line1": Line("収集・蒸留", "collect and distil source material", (), ("pack.json",)),
+    "line2": Line("構造化", "structured content and figures", ("pack.json",),
                   ("text.json", "test.json")),
     "line3": Line("台本", "dialogue script", ("pack.json",), ("script.md",)),
     "line4": Line("映像", "voice, direction, render, upload", ("script.md",),
@@ -61,12 +61,12 @@ LINES: dict[str, Line] = {
 
 # BI / progress view: six stages in production order.
 STAGES: tuple[tuple[str, str], ...] = (
-    ("pack", "資料パック"),
-    ("text", "Webテキスト"),
-    ("test", "診断テスト"),
+    ("pack", "素材パック"),
+    ("text", "構造化データ"),
+    ("test", "検証データ"),
     ("script", "台本"),
     ("video", "動画"),
-    ("youtube", "YouTube公開"),
+    ("youtube", "公開"),
 )
 
 _NUM = re.compile(r"(\d+)")

@@ -1,102 +1,103 @@
 # AI Production Line
 
-**A production line that turns curricula into video, web textbook and diagnostic test — as one set.**
+**A generative media stack that runs entirely on local GPUs.**
 
-Fifty-five subjects, 1,146 lessons, processed by **four independent CLI lines**:
-source gathering, material generation, script writing and video rendering,
-with a static site and a local BI dashboard on top.
+Image and video generation with ComfyUI in Docker, a local LLM, speech synthesis,
+rendering, a delivery layer and an operations dashboard — in one repository.
+No external generation API. Models, inputs and outputs stay on the machines.
 
 [![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Website](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [Benchmarks](docs/05-benchmarks.md)
+[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Generation](docs/03-video-pipeline.md) · [Delivery](docs/07-website.md) · [BI](docs/08-bi-dashboard.md)
 
-## What this is
+## Why local
 
-One lesson is one folder. **File existence is the state.**
+Cloud generation APIs are convenient, but they are a poor foundation for a production line:
 
-```bash
-py パイプライン/line1_collect/batch_collect.py --limit 10
-py パイプライン/line2_material/watch_material.py
-py パイプライン/line3_script/watch_script.py
-py パイプライン/line4_video/watch_video.py --machine m1
-```
-
-```
-[Line 1: gather & distil] → pack.json
-        ├→ [Line 2: material] → text.json / test.json / figures → auto deploy
-        └→ [Line 3: script]   → script.md
-                                 └→ [Line 4: video] → voice · direction · render → YouTube private
-```
-
-No resident workers, no queue, no approval ledger, no state machine.
-Each line is a stateless CLI batch: rerun it and it resumes at the first
-lesson that is not yet done.
-
-## Numbers
-
-| Metric | Result |
+| Constraint | What local buys you |
 |---|---|
-| Curriculum | **55 subjects / 237 chapters / 413 sections / 1,146 lessons** (~233 hours) |
-| Source packs | **1,060 lessons** (92.5%) |
-| Web textbooks | **488** (485 published) |
-| Diagnostic tests | **465** (459 published) |
-| Scripts | **509** |
-| Render farm | 2 machines in parallel (concurrency 4 / 6) |
-| BI | 1,146 lessons, one command |
+| Per-call pricing | Electricity only — thousands of attempts cost the same |
+| Rate limits and queueing | Two GPUs you can saturate whenever you want |
+| Inputs and outputs leave your machine | Nothing leaves the box |
+
+The point of this stack is to **decouple the number of attempts from cost**.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Image / video generation | **ComfyUI in Docker** (ai-dock base), SDXL, Flux, Wan 2.2, AnimateDiff |
+| Consistency | LoRA (kohya_ss), IP-Adapter FaceID, ControlNet, ReActor |
+| Post-processing | Real-ESRGAN, RIFE frame interpolation, LivePortrait / SadTalker / Wav2Lip |
+| LLM | llama.cpp (125B MoE, 256K context, 12GB VRAM) |
+| Speech | VOICEVOX (local HTTP) |
+| Video assembly | Remotion (React → MP4) |
+| Orchestration | Python (standard library only) |
+| Delivery | Static SPA + PWA (no server) |
+| Observability | Local BI (stdlib + bundled Chart.js) |
+| Runtime | Docker with GPU passthrough, Windows 11 |
+
+## Measured numbers
+
+| Metric | Value | Environment |
+|---|---|---|
+| Image generation | **~4 s / image** | RTX 3080 10GB, SDXL |
+| Image generation | ~12 s / image | RTX 3060 12GB, SDXL |
+| Video generation | **~5 s / clip** | RTX 3080, Wan 2.2 TI2V 5B, 832×480 |
+| Video generation | ~10 s / clip | RTX 3060, same model |
+| LoRA training | 2.40 s/it | RTX 3060, SDXL, kohya_ss |
+| LLM inference | 10.8 t/s @ 256K context | RTX 3060, 125B MoE |
+| Video render | 2 machines in parallel | Remotion |
+| External generation APIs | **0** | everything local |
 
 ## Three highlights
 
-**1. Pipeline — four lines that hold no state.**
-Where the previous version used a queue, a state machine and multi-stage review,
-this one writes state to the filesystem. Progress is "does this file exist".
-A failed lesson is logged and skipped; the line keeps going. The result is a
-system that survives a kill, a reboot or a broken lesson without recovery work.
+**1. ComfyUI as a reproducible Docker service.**
+One image, two machines. Custom-node dependencies pinned, Triton + SageAttention
+for a 20–30% speedup, models and outputs on separate named volumes, and
+`--lowvram --force-fp16` to fit 10–12GB of VRAM.
 
-**2. Website — a static SPA + PWA with no login.**
-1,146 lessons served from Cloudflare Pages with no server, no DB and no API.
-Hash routing, KaTeX, localStorage-only progress, and a Service Worker for
-offline use. Line 2 regenerates the catalog and deploys automatically.
+**2. Generation as a line, not a session.**
+Four independent CLI stages, no queue, no workers, no state machine.
+Progress is file existence. A failed unit is logged and skipped; the line keeps going.
+Rerunning resumes at the first unfinished unit.
 
-**3. BI — 1,146 lessons in one command.**
-A local dashboard built on the Python standard library only. Five tabs,
-a 55 × 6 stage matrix, line health from process command lines and artifact
-mtimes, alerts, cost tracking, and a bundled Chart.js for offline use.
-It is strictly read-only: a bug in the dashboard cannot stop production.
-
-![Subject matrix](docs/assets/bi-matrix.webp)
+**3. Generation, delivery and observability in one loop.**
+Outputs ship as a static SPA + PWA (no DB, no API), and a one-command local BI
+shows per-stage progress, line health, cost and failures.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-  subgraph L1["Line 1 · gather & distil"]
-    A1["Web / captions / official PDFs / Wikimedia"] --> A2["pack.json"]
+  subgraph LOCAL["Local machine (no external APIs)"]
+    subgraph GEN["Generation"]
+      C["ComfyUI<br/>Docker + GPU"]
+      L["llama.cpp<br/>local LLM"]
+      V["VOICEVOX"]
+    end
+    subgraph LINES["4 stateless lines"]
+      A1["collect"] --> A2["pack.json"]
+      A2 --> B1["structure"]
+      A2 --> C1["script"]
+      C1 --> D1["render"]
+    end
+    R["Remotion<br/>2 machines"]
+    S["Static SPA + PWA"]
+    BI["Local BI"]
   end
-  subgraph L2["Line 2 · material"]
-    B1["text.json"] --> B3["catalog.json"]
-    B2["test.json"] --> B3
-    B4["figures"] --> B3
-  end
-  subgraph L3["Line 3 · script"]
-    C1["script.md"]
-  end
-  subgraph L4["Line 4 · video"]
-    D1["VOICEVOX"] --> D3["Remotion"]
-    D2["direction timeline"] --> D3
-    D3 --> D4["M1 / M2 parallel render"]
-    D4 --> D5["YouTube private"]
-  end
-  A2 --> B1
-  A2 --> B2
-  A2 --> C1
-  C1 --> D1
-  B3 --> S["Site · Cloudflare Pages"]
-  A2 --> BI["BI dashboard"]
+  C --> D1
+  L --> A2
+  L --> B1
+  V --> D1
+  D1 --> R
+  B1 --> S
+  A2 --> BI
   B1 --> BI
-  C1 --> BI
+  D1 --> BI
 ```
 
 ## Quick start
@@ -115,14 +116,14 @@ python -m src.pipeline.gates.visual_layout samples/layout.example.json
 python -m unittest discover -s tests -v
 ```
 
-Edit one `text` in `samples/scenes.example.json` and run the gate again:
-that single scene is reported as stale. That is the failure class the gate exists for.
-
 ## What is not included
 
-A public edition of two private projects. Removed: source material, third-party
-content, commercially distributed products, credentials, internal hostnames,
-production prompts and character assets.
+A public edition of a private system. Removed: model files and LoRAs, source
+material, generated output, credentials, internal hostnames, production prompts
+and character definitions.
+
+Included: design decisions, the Docker setup, generalized implementations,
+measured numbers, and a failure log.
 
 ## License
 
@@ -132,4 +133,4 @@ Code: [MIT](LICENSE). Documentation: CC BY 4.0.
 
 **Rintaro Matsumoto** — 22 years in the Japan Ground Self-Defense Force working
 on communications infrastructure and combat simulation systems. Currently
-building AI-driven content production infrastructure.
+building local-first generative media infrastructure.

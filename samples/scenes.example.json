@@ -4,53 +4,13 @@
   "gap_sec": 0.5,
   "speaker_default": "a",
   "scenes": [
-    {
-      "id": 1,
-      "speaker": "a",
-      "duration": 3.2,
-      "text": "今日は集合と要素の個数について説明するのだ。"
-    },
-    {
-      "id": 2,
-      "speaker": "b",
-      "duration": 4.1,
-      "text": "まず、集合という言葉を整理しておきましょう。"
-    },
-    {
-      "id": 3,
-      "speaker": "a",
-      "duration": 3.7,
-      "text": "要素の個数を数えるとき、重複をどう扱うかがポイントなのだ。"
-    },
-    {
-      "id": 4,
-      "speaker": "b",
-      "duration": 5.0,
-      "text": "和集合の個数は、単純に足すだけでは正しく求まりません。"
-    },
-    {
-      "id": 5,
-      "speaker": "a",
-      "duration": 4.4,
-      "text": "重なりを一度だけ引く、という操作が必要になるのだ。"
-    },
-    {
-      "id": 6,
-      "speaker": "b",
-      "duration": 3.6,
-      "text": "ここで具体的な例を見てみましょう。"
-    },
-    {
-      "id": 7,
-      "speaker": "a",
-      "duration": 4.8,
-      "text": "三つの集合になると、包除原理という考え方を使うのだ。"
-    },
-    {
-      "id": 8,
-      "speaker": "b",
-      "duration": 3.0,
-      "text": "最後に、練習問題で確認しましょう。"
-    }
+    { "id": 1, "speaker": "a", "duration": 3.2, "text": "今日はパイプラインの流れを確認するのだ。" },
+    { "id": 2, "speaker": "b", "duration": 4.1, "text": "まず、入力と出力の関係を整理しておきましょう。" },
+    { "id": 3, "speaker": "a", "duration": 3.7, "text": "どの工程がどのファイルを生むのかがポイントなのだ。" },
+    { "id": 4, "speaker": "b", "duration": 5.0, "text": "途中で失敗しても、その単位だけ飛ばして先に進みます。" },
+    { "id": 5, "speaker": "a", "duration": 4.4, "text": "再実行すれば、未処理のところから再開できるのだ。" },
+    { "id": 6, "speaker": "b", "duration": 3.6, "text": "ここで実際のファイル構成を見てみましょう。" },
+    { "id": 7, "speaker": "a", "duration": 4.8, "text": "状態を持たないから、どこで落ちても復旧が早いのだ。" },
+    { "id": 8, "speaker": "b", "duration": 3.0, "text": "最後に、ゲートの動きを確認しましょう。" }
   ]
 }

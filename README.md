@@ -1,23 +1,98 @@
 # AI Production Line
 
-**学習コンテンツを「動画・Webテキスト・診断テスト」の3点セットで量産する制作基盤。**
+**ローカルのGPUだけで完結する、生成メディアの制作基盤。**
 
-55科目・1,146コマのカリキュラムを、**4つの独立したCLIライン**で処理します。
-資料収集から教材生成、台本、映像レンダリング、サイト公開、進捗の可視化まで、
-人間の確認を最小限にしたパイプラインです。
+ComfyUI（Docker）による画像・動画生成、ローカルLLM、音声合成、レンダリング、
+配信レイヤ、運用ダッシュボードまでを**1つのリポジトリ**にまとめた個人開発です。
+外部の生成APIに依存せず、素材もモデルも出力も、すべて手元のマシンの中で完結します。
 
 [![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [ウェブサイト](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [実測値](docs/05-benchmarks.md)
+[English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [生成基盤](docs/03-video-pipeline.md) · [配信レイヤ](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [実測値](docs/05-benchmarks.md)
 
 > **作った人**：松本 倫太郎。陸上自衛隊で22年間、通信インフラと戦闘シミュレーションシステムの開発に従事。IT実務24年。
 
-## これは何か
+## なぜローカルなのか
 
-1コマ＝1フォルダ。**ファイルの有無が、そのまま進捗**です。
+クラウドの生成APIは便利ですが、次の3点で制作基盤には向きません。
+
+| 制約 | ローカル構成での解決 |
+|---|---|
+| 従量課金。試行回数がそのままコストになる | 電気代だけ。何千回試しても単価が変わらない |
+| レート制限と待ち時間。並列化できない | 2台のGPUを好きなだけ回せる |
+| 素材と出力が外部に渡る | データがマシンの外に出ない |
+
+この基盤は、**試行錯誤の回数をコストから切り離す**ことを目的に組んでいます。
+
+## スタック
+
+| 層 | 技術 |
+|---|---|
+| 画像・動画生成 | **ComfyUI（Docker / ai-dock base）**、SDXL、Flux、Wan 2.2、AnimateDiff |
+| 一貫性 | LoRA（kohya_ss）、IP-Adapter FaceID、ControlNet、ReActor |
+| 後処理 | Real-ESRGAN、RIFE フレーム補間、LivePortrait / SadTalker / Wav2Lip |
+| LLM | llama.cpp（125B MoE / 256K context / 12GB VRAM） |
+| 音声 | VOICEVOX（ローカルHTTP） |
+| 映像合成 | Remotion（React → MP4） |
+| オーケストレーション | Python（標準ライブラリのみ） |
+| 配信 | 静的SPA＋PWA（Cloudflare Pages、サーバー不要） |
+| 可視化 | ローカルBI（Python標準ライブラリ、Chart.js同梱） |
+| 実行基盤 | Docker + GPUパススルー、Windows 11 |
+
+## 数字（実測）
+
+| 項目 | 値 | 環境 |
+|---|---|---|
+| 画像生成 | **約4秒/枚** | RTX 3080 10GB / SDXL |
+| 画像生成 | 約12秒/枚 | RTX 3060 12GB / SDXL |
+| 動画生成 | **約5秒/クリップ** | RTX 3080 / Wan 2.2 TI2V 5B / 832×480 |
+| 動画生成 | 約10秒/クリップ | RTX 3060 / 同モデル |
+| LoRA訓練 | 2.40 s/it | RTX 3060 / SDXL / kohya_ss |
+| LLM推論 | 10.8 t/s @ 256K context | RTX 3060 / 125B MoE |
+| 映像レンダ | 2台並列（concurrency 4 / 6） | Remotion |
+| 外部生成API | **0** | すべてローカル |
+
+## 3つの技術的ハイライト
+
+### 1. ComfyUIをDockerで運用する
+
+生成基盤はDockerイメージに閉じ込めています。ホストを汚さず、2台のマシンで同じ環境を再現できます。
+
+```yaml
+services:
+  comfyui:
+    build: .
+    image: ghcr.io/ai-dock/comfyui:custom
+    ports: ["18188:18188"]
+    environment:
+      - COMFYUI_ARGS=--listen 0.0.0.0 --port 18188 --lowvram --force-fp16
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - comfyui_models:/opt/ComfyUI/models
+      - comfyui_custom_nodes:/opt/ComfyUI/custom_nodes
+      - comfyui_output:/opt/ComfyUI/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+- ai-dock の ComfyUI イメージをベースに、カスタムノードの依存を固定
+- **Triton + SageAttention** を導入し、推論を20〜30%高速化
+- モデル・custom_nodes・output は named volume に分離（イメージ再ビルドで消えない）
+- `--lowvram --force-fp16` で10〜12GBのVRAMに収める
+
+同じイメージを2台に配布し、VRAMに応じてワークフローを切り替えます。
+
+### 2. 生成を「ライン」として回す
+
+画像1枚を作る作業を、再現可能なバッチに分解しています。
 
 ```bash
 py パイプライン/line1_collect/batch_collect.py --limit 10
@@ -27,124 +102,53 @@ py パイプライン/line4_video/watch_video.py --machine m1
 ```
 
 ```
-[Line 1: 資料収集＆蒸留] → pack.json
-        ├→ [Line 2: 教材] → text.json / test.json / 図 → サイト自動デプロイ
-        └→ [Line 3: 台本] → script.md
-                              └→ [Line 4: 映像] → 音声・演出・レンダ → YouTube private
+[Line 1: 収集・蒸留] → pack.json
+        ├→ [Line 2: 構造化] → text.json / test.json / figures → 自動デプロイ
+        └→ [Line 3: 台本]   → script.md
+                              └→ [Line 4: 映像] → 音声・演出・レンダ
 ```
 
-常駐ワーカー、進行役、独自キュー、承認台帳、状態機械は**置いていません**。
-各ラインはステートレスなCLIバッチで、中断しても再実行すれば未処理のコマから再開します。
+**状態を持ちません。** 進捗はファイルの有無で決まり、キューもワーカーも状態機械もありません。
+失敗したユニットはログを残してスキップし、ラインは止まりません。
 
-## 数字（実測）
+### 3. 生成から配信・観測まで一気通貫
 
-| 項目 | 実績 |
-|---|---|
-| カリキュラム | **55科目 / 237章 / 413節 / 1,146コマ**（約233時間・学習指導要領/シラバス1,576項目を100%網羅） |
-| 資料パック生成 | **1,060コマ**（92.5%） |
-| Webテキスト | **488コマ**（うち公開 485） |
-| 診断テスト | **465コマ**（うち公開 459） |
-| 台本 | **509コマ** |
-| 映像レンダ | M1 / M2 の**2台並列**（concurrency 4 / 6） |
-| BI | 1,146コマを**1コマンド**で可視化 |
-
-> 数値は2026年11月時点のスナップショットです。映像ラインは移行直後のため、動画本数はこれから伸びる段階にあります。
-
-## 3つの技術的ハイライト
-
-### 1. パイプライン全体 — 「状態を持たない」4ライン
-
-前バージョンは、常駐ワーカー・独自キュー・承認台帳・多段査読で縛る構成でした。
-流量が増えるほど詰まり、障害時の復旧コストが支配的になります。
-
-現行版は**状態をファイルに逃がしました**。
-
-| 判断 | 現行の方式 |
-|---|---|
-| どこまで進んだか | `pack.json` / `text.json` / `script.md` の有無 |
-| 次に何をするか | 未処理のコマを**若い番号から**再スキャン |
-| 失敗したら | エラーログを残して**即スキップ**し、ラインは止めない |
-| やり直したいとき | `--force` を付けたコマだけ上書き |
-| 品質保証 | 機械チェック＋**最大1回**の自動リトライ |
-
-「状態機械を正しく保つ」問題を、「ファイルがあるか見る」問題に置き換えた形です。
-プロセスを殺しても、電源を落としても、進捗は壊れません。
-
-### 2. ウェブサイト — ログイン不要の静的SPA＋PWA
-
-1,146コマの参考書型テキストと診断テストを、**サーバーなし**で配信します。
-
-- Cloudflare Pages の静的ホスティング。DBもAPIもなし
-- 4階層ナビ（科目 → 章 → 節 → コマ）をハッシュルーティングで実現
-- 数式は KaTeX、進捗とテスト履歴は `localStorage` のみ
-- Service Worker でコアシェルをキャッシュし、**オフラインでも開ける**
-- 2テーマ（緑／桃）、通知表、赤シートモード、学習ポイント
-
-教材生成（Line 2）が `catalog.json` を更新し、デプロイまで自動で流れます。
-
-### 3. BIツール — 1,146コマを1コマンドで見る
-
-制作状況を可視化するローカルダッシュボードです。**Python標準ライブラリのみ**で動きます。
-
-```bash
-py run_bi.py     # → http://127.0.0.1:8787
-```
-
-- **5タブ**：概要 / 科目 / 推移 / エージェント / ログ
-- **科目マトリクス**：55科目 × 6工程を母数付き（`18/18`）で表示、検索・絞込・ソート
-- **ライン監視**：稼働／滞留／停止を、実行中プロセスのコマンドラインと成果物の更新時刻から判定
-- **アラート**：停止・滞留・サイト未反映・失敗・ディスク残量を自動判定
-- **コスト**：ライン別・モデル別の累計USD
-- Chart.js を同梱し、**オフライン動作**。127.0.0.1 のみで待受
-
-「どの科目が、どの工程で、どこまで進んでいるか」を答えるために作りました。
-進捗の正はファイルの有無で、UIはそれを読むだけです。
-
-![科目マトリクス](docs/assets/bi-matrix.webp)
-
-### 補足：ローカルLLMの運用知見
-
-制作基盤の前段として、12GBのGPUで125B MoEモデルを256Kコンテキストで動かす検証も行っています。
-KVキャッシュの量子化を混在させるとFlash Attentionが無効化され、15倍遅くなる現象を特定しました。
-詳細は [docs/02-local-llm.md](docs/02-local-llm.md)。
+- **配信**：生成物を静的SPA＋PWAとして配信。DBもAPIもサーバーも不要
+- **観測**：1コマンドで起動するローカルBI。工程別の進捗、稼働状況、コスト、失敗を1画面に集約
+- **再現性**：Dockerイメージ・要件固定・ボリューム分離で、別マシンでも同じ結果
 
 ## アーキテクチャ
 
 ```mermaid
 flowchart TB
-  subgraph L1["Line 1 · 資料収集＆蒸留"]
-    A1["Web / YouTube字幕 / 公式PDF / Wikimedia"] --> A2["pack.json"]
+  subgraph LOCAL["Local machine（外部APIなし）"]
+    subgraph GEN["Generation"]
+      C["ComfyUI<br/>Docker + GPU"]
+      L["llama.cpp<br/>local LLM"]
+      V["VOICEVOX"]
+    end
+
+    subgraph LINES["4 stateless lines"]
+      A1["collect"] --> A2["pack.json"]
+      A2 --> B1["structure"]
+      A2 --> C1["script"]
+      C1 --> D1["render"]
+    end
+
+    R["Remotion<br/>2 machines"]
+    S["Static SPA + PWA"]
+    BI["Local BI"]
   end
 
-  subgraph L2["Line 2 · 教材"]
-    B1["text.json"] --> B3["catalog.json"]
-    B2["test.json"] --> B3
-    B4["図解SVG"] --> B3
-  end
-
-  subgraph L3["Line 3 · 台本"]
-    C1["script.md"]
-  end
-
-  subgraph L4["Line 4 · 映像"]
-    D1["音声合成<br/>VOICEVOX"] --> D3["Remotion"]
-    D2["演出タイムライン"] --> D3
-    D3 --> D4["M1 / M2 並列レンダ"]
-    D4 --> D5["YouTube private"]
-  end
-
-  A2 --> B1
-  A2 --> B2
-  A2 --> C1
-  C1 --> D1
-
-  B3 --> S["サイト<br/>Cloudflare Pages"]
-  D5 --> P["公開判断"]
-
-  A2 --> BI["BI ダッシュボード"]
+  C --> D1
+  L --> A2
+  L --> B1
+  V --> D1
+  D1 --> R
+  B1 --> S
+  A2 --> BI
   B1 --> BI
-  C1 --> BI
-  D4 --> BI
+  D1 --> BI
 ```
 
 詳細は [docs/01-architecture.md](docs/01-architecture.md)。
@@ -153,29 +157,24 @@ flowchart TB
 
 ```
 .
-├── README.md
 ├── docs/
-│   ├── 01-architecture.md      4ライン設計・状態を持たない理由
-│   ├── 02-local-llm.md         ローカルLLM運用（量子化・KV・スループット）
-│   ├── 03-video-pipeline.md    Line 4 映像パイプライン
-│   ├── 04-quality-gates.md     機械チェックと著作権ガード
-│   ├── 05-benchmarks.md        実測値と測定条件
-│   ├── 06-lessons.md           失敗と対策の記録
-│   ├── 07-website.md           静的SPA＋PWAの設計
-│   └── 08-bi-dashboard.md      BIの指標定義と実装
+│   ├── 01-architecture.md      ローカル完結の設計と4ライン
+│   ├── 02-local-llm.md         ローカルLLM（量子化・KV・スループット）
+│   ├── 03-video-pipeline.md    ComfyUI / Wan 2.2 / LoRA / レンダ
+│   ├── 04-quality-gates.md     機械チェックとライセンスガード
+│   ├── 05-benchmarks.md        実測値
+│   ├── 06-lessons.md           失敗と対策
+│   ├── 07-website.md           配信レイヤ（SPA + PWA）
+│   └── 08-bi-dashboard.md      ローカルBI
 ├── src/
 │   ├── pipeline/
-│   │   ├── lines.py            ステートレスなライン実行の参照実装
-│   │   ├── progress.py         ファイル有無から進捗を計算
+│   │   ├── lines.py            ステートレスなライン実行
+│   │   ├── progress.py         ファイル有無からの進捗計算
 │   │   ├── distribute.py       フレーム分割の配分計画
-│   │   └── gates/
-│   │       ├── audio_freshness.py
-│   │       └── visual_layout.py
-│   └── llm/
-│       ├── benchmark.py
-│       └── healthcheck.py
-├── tests/                      unittest（外部依存なし）
-└── samples/                    設定例・シーン例
+│   │   └── gates/              音声鮮度・レイアウト検査
+│   └── llm/                    ベンチマーク・ヘルスチェック
+├── samples/                    設定例・デモデータ
+└── tests/                      unittest（45件・外部依存なし）
 ```
 
 ## クイックスタート
@@ -183,44 +182,27 @@ flowchart TB
 実行時依存はありません（Python標準ライブラリのみ）。
 
 ```bash
-# ライン実行の計画を表示（実際には何もしない）
-python -m src.pipeline.lines --root samples/lessons --dry-run
-
-# 進捗を計算（BIと同じ指標）
+python -m src.pipeline.lines --root samples/lessons --line line2 --dry-run
 python -m src.pipeline.progress --root samples/lessons
 
-# ゲートのデモ
 python samples/make_demo_audio.py
 python -m src.pipeline.gates.audio_freshness \
   --scenes samples/scenes.example.json --audio-dir samples/audio
 python -m src.pipeline.gates.visual_layout samples/layout.example.json
 
-# テスト
 python -m unittest discover -s tests -v
 ```
 
 > `python` が使えない環境では `py` に読み替えてください。
 
-## 実測値（抜粋）
-
-| 項目 | 値 | 条件 |
-|---|---|---|
-| 資料収集バッチ | 468コマ / 約4〜6時間 | 直列＋クールダウン（429回避） |
-| Webテキスト生成 | 488コマ | DeepSeek V4.1 Flash |
-| 映像レンダ | M1 / M2 並列 | Remotion 1920×1080 / 30fps |
-| ローカルLLM | 10.8 t/s @ 256K ctx | RTX 3060 12GB / 125B MoE |
-
-条件と再現手順は [docs/05-benchmarks.md](docs/05-benchmarks.md)。
-
 ## この公開版について
 
-2つの個人プロジェクトで実際に稼働しているシステムの**公開用エディション**です。
+個人プロジェクトの**公開用エディション**です。
 
-含めていないもの：教材の原資料・過去問題・第三者コンテンツ、商用配布物、
-認証情報、内部ホスト名、実運用のプロンプト全文、キャラクター素材。
+含めていないもの：モデルファイル・LoRA、素材、生成物、認証情報、内部ホスト名、
+実運用のプロンプト全文、キャラクター設定。
 
-含めているもの：設計判断とその理由、一般化した実装、実測値、
-そして失敗の記録（[docs/06-lessons.md](docs/06-lessons.md)）。
+含めているもの：設計判断、Docker構成、一般化した実装、実測値、失敗の記録。
 
 ## ライセンス
 
@@ -230,4 +212,4 @@ python -m unittest discover -s tests -v
 
 **Author** — 松本 倫太郎 / Rintaro Matsumoto
 陸上自衛隊で22年間、通信インフラと戦闘シミュレーションシステムの開発に従事。
-現在はAIを活用したコンテンツ生産基盤の設計・運用に取り組んでいます。
+現在はローカルGPUによる生成メディア基盤の設計・運用に取り組んでいます。
