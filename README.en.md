@@ -1,111 +1,128 @@
 # AI Production Line
 
-**Turns "make one video" into "operate a production line" — local LLMs plus distributed rendering.**
+**A production line that turns curricula into video, web textbook and diagnostic test — as one set.**
 
-A 16-stage pipeline that goes from script generation to rendering, quality
-gating and publishing, distributing renders across 2–3 GPU machines to produce
-a 20-minute explainer video in **11–16 minutes**.
+Fifty-five subjects, 1,146 lessons, processed by **four independent CLI lines**:
+source gathering, material generation, script writing and video rendering,
+with a static site and a local BI dashboard on top.
 
 [![CI](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml/badge.svg)](https://github.com/RintaroMatsumoto/ai-production-line/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-[![Dependencies](https://img.shields.io/badge/dependencies-none-success)](requirements.txt)
+[![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Benchmarks](docs/05-benchmarks.md) · [Lessons](docs/06-lessons.md)
-
----
+[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Website](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [Benchmarks](docs/05-benchmarks.md)
 
 ## What this is
 
+One lesson is one folder. **File existence is the state.**
+
 ```bash
-python -m src.pipeline.orchestrator --unit U-M-I-01
+py パイプライン/line1_collect/batch_collect.py --limit 10
+py パイプライン/line2_material/watch_material.py
+py パイプライン/line3_script/watch_script.py
+py パイプライン/line4_video/watch_video.py --machine m1
 ```
 
 ```
-lecture → survey → spec → design → script → quality
-        → scene → visuals → reading → audio → assets
-        → presentation → thumbnail → render → qa → progress
+[Line 1: gather & distil] → pack.json
+        ├→ [Line 2: material] → text.json / test.json / figures → auto deploy
+        └→ [Line 3: script]   → script.md
+                                 └→ [Line 4: video] → voice · direction · render → YouTube private
 ```
 
-Every stage produces a verified artifact. When a gate fails, the pipeline
-stops — it does not continue with output that merely *looks* successful.
+No resident workers, no queue, no approval ledger, no state machine.
+Each line is a stateless CLI batch: rerun it and it resumes at the first
+lesson that is not yet done.
 
 ## Numbers
 
 | Metric | Result |
 |---|---|
-| Pipeline stages | **16** (each resumable) |
-| Units managed | **777** |
-| Source pages indexed | **11,669** (full-text search) |
-| Render, 2 machines | **15.7 min** per 19.6-min video |
-| Render, 3 machines | **11.2–12.7 min** |
-| Gate pass rate | **95%** (19/20 rubric) |
+| Curriculum | **55 subjects / 237 chapters / 413 sections / 1,146 lessons** (~233 hours) |
+| Source packs | **1,060 lessons** (92.5%) |
+| Web textbooks | **488** (485 published) |
+| Diagnostic tests | **465** (459 published) |
+| Scripts | **509** |
+| Render farm | 2 machines in parallel (concurrency 4 / 6) |
+| BI | 1,146 lessons, one command |
 
-## What this demonstrates
+## Three highlights
 
-| Area | Content |
-|---|---|
-| **Distributed systems** | Split one video across machines, cut on meaningful boundaries, verify, then concatenate |
-| **Verification design** | Gates that fail when they should, closing off the failure modes of automation |
-| **Performance tuning** | Quantization and memory placement tuned by measurement under a 12GB constraint |
-| **Documentation** | Decisions and failures written so that six-months-later-me can act on them |
+**1. Pipeline — four lines that hold no state.**
+Where the previous version used a queue, a state machine and multi-stage review,
+this one writes state to the filesystem. Progress is "does this file exist".
+A failed lesson is logged and skipped; the line keeps going. The result is a
+system that survives a kill, a reboot or a broken lesson without recovery work.
 
-## Three technical highlights
+**2. Website — a static SPA + PWA with no login.**
+1,146 lessons served from Cloudflare Pages with no server, no DB and no API.
+Hash routing, KaTeX, localStorage-only progress, and a Service Worker for
+offline use. Line 2 regenerates the catalog and deploys automatically.
 
-**1. A 125B MoE model at 256K context on a 12GB GPU.**
-Quantized weights plus Q8_0 KV cache reach 10.8 t/s. Mixing K/V quantization
-silently disables Flash Attention and collapses throughput to 0.70 t/s at 4K
-context — no error, no warning.
+**3. BI — 1,146 lessons in one command.**
+A local dashboard built on the Python standard library only. Five tabs,
+a 55 × 6 stage matrix, line health from process command lines and artifact
+mtimes, alerts, cost tracking, and a bundled Chart.js for offline use.
+It is strictly read-only: a bug in the dashboard cannot stop production.
 
-**2. Distributed rendering that snaps to scene boundaries.**
-Frame ranges are split by measured throughput ratio, but split points are
-forced onto scene starts. Splitting mid-line produces a broken concat with exit
-code 0; snapping plus a ±0.2s duration check eliminates it.
+![Subject matrix](docs/assets/bi-matrix.webp)
 
-![distribute](docs/assets/demo-distribute.svg)
+## Architecture
 
-**3. Gates that detect stale artifacts.**
-The worst failure mode in automation is not a crash — it is an old file that
-looks new. Audio files carry a SHA256 fingerprint of the text, speaker and
-synthesis parameters, so a render cannot proceed when the script changed but
-the audio did not.
-
-![gate](docs/assets/demo-gate.svg)
-
-## Repository layout
-
-```
-docs/     design notes, benchmarks, and a failure log
-src/      runnable reference implementations (stdlib only)
-tests/    unittest suite, no external dependencies
-samples/  example scene, layout and pipeline config
+```mermaid
+flowchart TB
+  subgraph L1["Line 1 · gather & distil"]
+    A1["Web / captions / official PDFs / Wikimedia"] --> A2["pack.json"]
+  end
+  subgraph L2["Line 2 · material"]
+    B1["text.json"] --> B3["catalog.json"]
+    B2["test.json"] --> B3
+    B4["figures"] --> B3
+  end
+  subgraph L3["Line 3 · script"]
+    C1["script.md"]
+  end
+  subgraph L4["Line 4 · video"]
+    D1["VOICEVOX"] --> D3["Remotion"]
+    D2["direction timeline"] --> D3
+    D3 --> D4["M1 / M2 parallel render"]
+    D4 --> D5["YouTube private"]
+  end
+  A2 --> B1
+  A2 --> B2
+  A2 --> C1
+  C1 --> D1
+  B3 --> S["Site · Cloudflare Pages"]
+  A2 --> BI["BI dashboard"]
+  B1 --> BI
+  C1 --> BI
 ```
 
 ## Quick start
 
+No runtime dependencies.
+
 ```bash
+python -m src.pipeline.lines --root samples/lessons --line line2 --dry-run
+python -m src.pipeline.progress --root samples/lessons
+
 python samples/make_demo_audio.py
-
-python -m src.pipeline.distribute --frames 35230 \
-  --weights m1=0.42,local=0.29,m2=0.29 --scene-json samples/scenes.example.json
-
 python -m src.pipeline.gates.audio_freshness \
   --scenes samples/scenes.example.json --audio-dir samples/audio
-
-python -m src.pipeline.orchestrator --unit DEMO-01 --dry-run
+python -m src.pipeline.gates.visual_layout samples/layout.example.json
 
 python -m unittest discover -s tests -v
 ```
 
-Try breaking the freshness gate: edit any `text` in
-`samples/scenes.example.json` and run the gate again. The unchanged WAV is now
-reported as stale — exactly the bug the gate was built for.
+Edit one `text` in `samples/scenes.example.json` and run the gate again:
+that single scene is reported as stale. That is the failure class the gate exists for.
 
 ## What is not included
 
-This is a public edition of two private projects. Removed: third-party
-copyrighted material, commercially distributed content, credentials, internal
-hostnames and production prompts.
+A public edition of two private projects. Removed: source material, third-party
+content, commercially distributed products, credentials, internal hostnames,
+production prompts and character assets.
 
 ## License
 

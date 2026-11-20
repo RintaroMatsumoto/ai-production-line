@@ -31,6 +31,8 @@ jobs:
       - name: End-to-end demo
         run: |
           set -e
+          python -m src.pipeline.lines --root samples/lessons --line line2 --dry-run
+          python -m src.pipeline.progress --root samples/lessons
           python samples/make_demo_audio.py
           python -m src.pipeline.distribute \
             --frames 1074 \
@@ -39,8 +41,6 @@ jobs:
           python -m src.pipeline.gates.audio_freshness \
             --scenes samples/scenes.example.json --audio-dir samples/audio
           python -m src.pipeline.gates.visual_layout samples/layout.example.json
-          python -m src.pipeline.orchestrator \
-            --unit DEMO-01 --config samples/config.example.json --dry-run
 
       - name: Verify the freshness gate rejects stale audio
         run: |

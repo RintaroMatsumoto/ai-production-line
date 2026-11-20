@@ -76,7 +76,7 @@ class AudioFreshnessTest(unittest.TestCase):
         self.assertEqual(fingerprint("a", "zun", PARAMS),
                          fingerprint("a", "zun", PARAMS))
         self.assertNotEqual(fingerprint("a", "zun", PARAMS),
-                            fingerprint("a", "metan", PARAMS))
+                            fingerprint("a", "b", PARAMS))
 
     def test_reads_utf8_bom(self):
         """Windows editors commonly save JSON with a BOM; do not crash on it."""
