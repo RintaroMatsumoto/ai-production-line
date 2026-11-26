@@ -12,7 +12,7 @@ ComfyUI（Docker）による画像・動画生成、音声合成、レンダリ�
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [生成基盤](docs/03-video-pipeline.md) · [配信レイヤ](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [実測値](docs/05-benchmarks.md)
+[English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [生成基盤](docs/03-video-pipeline.md) · [配信レイヤ](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [会話記憶RAG](docs/09-conversation-memory-rag.md) · [実測値](docs/05-benchmarks.md)
 
 > **作った人**：松本 倫太郎。陸上自衛隊で22年間、通信インフラと戦闘シミュレーションシステムの開発に従事。IT実務24年。
 
@@ -127,6 +127,21 @@ py パイプライン/line4_video/watch_video.py --machine m1
 - **観測**：1コマンドで起動するローカルBI。工程別の進捗、稼働状況、コスト、失敗を1画面に集約
 - **再現性**：Dockerイメージ・要件固定・ボリューム分離で、別マシンでも同じ結果
 
+## 関連プロジェクト：会話記憶RAG
+
+この制作基盤とは別に、日々の開発セッションを索引して「前回の続き」から再開するローカルRAGを個人開発で運用しています。
+
+検索は SQLite FTS5（日本語bigram）と multilingual-e5-small（384次元・float16）の2レーンに、直近セッションを加えた3レーンを RRF で統合。チャンクは700文字・100文字オーバーラップ、SHA-256で重複排除、秘密情報はマスク、注入は1回・最大3,500文字に制限しています。
+
+| 項目 | 値 |
+|---|---:|
+| 索引セッション | 254 |
+| チャンク | 30,198 |
+| 索引DB | 259.8 MB |
+| 増分索引 | 15分ごと |
+
+詳細は [docs/09-conversation-memory-rag.md](docs/09-conversation-memory-rag.md)。
+
 ## アーキテクチャ
 
 ```mermaid
@@ -183,7 +198,8 @@ flowchart TB
 │   ├── 05-benchmarks.md        実測値
 │   ├── 06-lessons.md           失敗と対策
 │   ├── 07-website.md           配信レイヤ（SPA + PWA）
-│   └── 08-bi-dashboard.md      ローカルBI
+│   ├── 08-bi-dashboard.md      ローカルBI
+│   └── 09-conversation-memory-rag.md  会話記憶RAG（設計・数値・制約）
 ├── src/
 │   ├── pipeline/
 │   │   ├── lines.py            ステートレスなライン実行
@@ -218,7 +234,7 @@ python -m unittest discover -s tests -v
 個人プロジェクトの**公開用エディション**です。
 
 含めていないもの：モデルファイル・LoRA、素材、生成物、認証情報、内部ホスト名、
-実運用のプロンプト全文、キャラクター設定。
+実運用のプロンプト全文、キャラクター設定、会話記憶RAGの実装本体（設計と数値のみ `docs/09` に収録）。
 
 含めているもの：設計判断、Docker構成、一般化した実装、実測値、失敗の記録。
 

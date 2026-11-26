@@ -12,7 +12,7 @@ Text generation does use cloud models, because that is where the quality is.
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Generation](docs/03-video-pipeline.md) · [Delivery](docs/07-website.md) · [BI](docs/08-bi-dashboard.md)
+[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Generation](docs/03-video-pipeline.md) · [Delivery](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [Conversation-memory RAG](docs/09-conversation-memory-rag.md)
 
 ## Where each step runs
 
@@ -79,6 +79,21 @@ Rerunning resumes at the first unfinished unit.
 Outputs ship as a static SPA + PWA (no DB, no API), and a one-command local BI
 shows per-stage progress, line health, cost and failures.
 
+## Related project: conversation-memory RAG
+
+Separately from this pipeline, I run a local RAG that indexes development sessions so a new session can resume with prior context.
+
+It fuses three lanes with RRF: SQLite FTS5 (Japanese bigram), multilingual-e5-small (384 dimensions, float16), and a recency lane. Chunks are 700 characters with 100-character overlap, deduplicated with SHA-256, secrets are redacted, and injection is capped at 3,500 characters once per session.
+
+| Metric | Value |
+|---|---:|
+| Indexed sessions | 254 |
+| Chunks | 30,198 |
+| Index DB | 259.8 MB |
+| Incremental indexing | every 15 minutes |
+
+Details: [docs/09-conversation-memory-rag.md](docs/09-conversation-memory-rag.md) (Japanese).
+
 ## Architecture
 
 ```mermaid
@@ -137,7 +152,8 @@ python -m unittest discover -s tests -v
 
 A public edition of a private system. Removed: model files and LoRAs, source
 material, generated output, credentials, internal hostnames, production prompts
-and character definitions.
+and character definitions. The conversation-memory RAG implementation itself is
+not included; only its design and measurements are in `docs/09`.
 
 Included: design decisions, the Docker setup, generalized implementations,
 measured numbers, and a failure log.
