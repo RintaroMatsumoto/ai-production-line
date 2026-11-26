@@ -12,7 +12,7 @@ Text generation does use cloud models, because that is where the quality is.
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Generation](docs/03-video-pipeline.md) · [Delivery](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [Conversation-memory RAG](docs/09-conversation-memory-rag.md)
+[日本語 README](README.md) · [Architecture](docs/01-architecture.md) · [Generation](docs/03-video-pipeline.md) · [Delivery](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [Conversation-memory RAG](docs/09-conversation-memory-rag.md) · [Decision layer](docs/10-decision-gate.md)
 
 ## Where each step runs
 
@@ -43,6 +43,7 @@ Text is low-volume and its quality sets the quality of everything downstream, so
 | Post-processing | Real-ESRGAN, RIFE frame interpolation, LivePortrait / SadTalker / Wav2Lip |
 | LLM (local) | llama.cpp (125B MoE, 256K context, 12GB VRAM) |
 | LLM (cloud) | Gemini, DeepSeek (text and bulk preprocessing) |
+| Decision | **Strands Decider v2 E2B** (System One, non-generative) |
 | Speech | VOICEVOX (local HTTP) |
 | Video assembly | Remotion (React → MP4) |
 | Orchestration | Python (standard library only) |
@@ -60,10 +61,11 @@ Text is low-volume and its quality sets the quality of everything downstream, so
 | Video generation | ~10 s / clip | RTX 3060, same model |
 | LoRA training | 2.40 s/it | RTX 3060, SDXL, kohya_ss |
 | Local LLM inference | 10.8 t/s @ 256K context | RTX 3060, 125B MoE |
+| Reasoning-effort decision | **0.17–0.47 s / call** | RTX 3060, decider E2B, 9.77GB VRAM |
 | Video render | 2 machines in parallel | Remotion |
 | External APIs for image/video/speech | **0** | all local |
 
-## Three highlights
+## Four highlights
 
 **1. ComfyUI as a reproducible Docker service.**
 One image, two machines. Custom-node dependencies pinned, Triton + SageAttention
@@ -78,6 +80,13 @@ Rerunning resumes at the first unfinished unit.
 **3. Generation, delivery and observability in one loop.**
 Outputs ship as a static SPA + PWA (no DB, no API), and a one-command local BI
 shows per-stage progress, line health, cost and failures.
+
+**4. Decisions go to a small, non-generative model.**
+A decision model picks the reasoning effort (low / high / max) from the user's
+prompt. Thresholds are asymmetric: downgrading a trivial request can hurt
+quality, while upgrading a complex one only costs more. A failed or slow
+decision falls back to the default, and explicit selections are never touched.
+Measured at 0.17–0.47 s per decision. Details: [docs/10-decision-gate.md](docs/10-decision-gate.md) (Japanese).
 
 ## Related project: conversation-memory RAG
 
@@ -144,6 +153,10 @@ python samples/make_demo_audio.py
 python -m src.pipeline.gates.audio_freshness \
   --scenes samples/scenes.example.json --audio-dir samples/audio
 python -m src.pipeline.gates.visual_layout samples/layout.example.json
+
+# Requires a running System One decision endpoint
+python -m src.llm.decision_gate --endpoint http://127.0.0.1:8001 \
+  --state "Review this design critically and propose improvements"
 
 python -m unittest discover -s tests -v
 ```

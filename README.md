@@ -12,7 +12,7 @@ ComfyUI（Docker）による画像・動画生成、音声合成、レンダリ�
 [![Dependencies](https://img.shields.io/badge/runtime%20deps-none-success)](requirements.txt)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [生成基盤](docs/03-video-pipeline.md) · [配信レイヤ](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [会話記憶RAG](docs/09-conversation-memory-rag.md) · [実測値](docs/05-benchmarks.md)
+[English README](README.en.md) · [アーキテクチャ](docs/01-architecture.md) · [生成基盤](docs/03-video-pipeline.md) · [配信レイヤ](docs/07-website.md) · [BI](docs/08-bi-dashboard.md) · [会話記憶RAG](docs/09-conversation-memory-rag.md) · [判断レイヤ](docs/10-decision-gate.md) · [実測値](docs/05-benchmarks.md)
 
 > **作った人**：松本 倫太郎。陸上自衛隊で22年間、通信インフラと戦闘シミュレーションシステムの開発に従事。IT実務24年。
 
@@ -45,6 +45,7 @@ ComfyUI（Docker）による画像・動画生成、音声合成、レンダリ�
 | 後処理 | Real-ESRGAN、RIFE フレーム補間、LivePortrait / SadTalker / Wav2Lip |
 | LLM（ローカル） | llama.cpp（125B MoE / 256K context / 12GB VRAM） |
 | LLM（クラウド） | Gemini、DeepSeek（テキスト生成・下処理） |
+| 判断 | **Strands Decider v2 E2B**（System One / 非生成モデル） |
 | 音声 | VOICEVOX（ローカルHTTP） |
 | 映像合成 | Remotion（React → MP4） |
 | オーケストレーション | Python（標準ライブラリのみ） |
@@ -62,10 +63,11 @@ ComfyUI（Docker）による画像・動画生成、音声合成、レンダリ�
 | 動画生成 | 約10秒/クリップ | RTX 3060 / 同モデル |
 | LoRA訓練 | 2.40 s/it | RTX 3060 / SDXL / kohya_ss |
 | ローカルLLM推論 | 10.8 t/s @ 256K context | RTX 3060 / 125B MoE |
+| 推論強度の判定 | **0.17〜0.47秒/回** | RTX 3060 / 判断モデル E2B / VRAM 9.77GB |
 | 映像レンダ | 2台並列（concurrency 4 / 6） | Remotion |
 | 画像・動画・音声の外部API | **0** | すべてローカル |
 
-## 3つの技術的ハイライト
+## 4つの技術的ハイライト
 
 ### 1. ComfyUIをDockerで運用する
 
@@ -126,6 +128,18 @@ py パイプライン/line4_video/watch_video.py --machine m1
 - **配信**：生成物を静的SPA＋PWAとして配信。DBもAPIもサーバーも不要
 - **観測**：1コマンドで起動するローカルBI。工程別の進捗、稼働状況、コスト、失敗を1画面に集約
 - **再現性**：Dockerイメージ・要件固定・ボリューム分離で、別マシンでも同じ結果
+
+### 4. 判断は小さなモデルに任せる
+
+モデルの推論強度（low / high / max）を、文章を生成しない**判断モデル**に選ばせています。
+OpenCode の強度に `decision` を1つ追加し、それを選んだときだけ判定が走ります。
+
+- 判定は1回のフォワードパスで **0.17〜0.47秒**。クラウドLLMに「難しいですか」と聞くより桁で速い
+- しきい値は**方向別**。`trivial → low` は品質が落ちるので厳しめ、`complex → max` はコスト増だけなので緩め
+- 判定が失敗・タイムアウトしたら既定の強度で続行（fail-open）。明示選択は触らない
+- 判断モデルが9.8GBのVRAMを使うため、12Bの生成モデルとは同時に動かさない
+
+詳細は [docs/10-decision-gate.md](docs/10-decision-gate.md)。
 
 ## 関連プロジェクト：会話記憶RAG
 
@@ -199,15 +213,16 @@ flowchart TB
 │   ├── 06-lessons.md           失敗と対策
 │   ├── 07-website.md           配信レイヤ（SPA + PWA）
 │   ├── 08-bi-dashboard.md      ローカルBI
-│   └── 09-conversation-memory-rag.md  会話記憶RAG（設計・数値・制約）
+│   ├── 09-conversation-memory-rag.md  会話記憶RAG（設計・数値・制約）
+│   └── 10-decision-gate.md     判断モデルによる推論強度の選択
 ├── src/
 │   ├── pipeline/
 │   │   ├── lines.py            ステートレスなライン実行
 │   │   ├── progress.py         ファイル有無からの進捗計算
 │   │   ├── distribute.py       フレーム分割の配分計画
 │   │   └── gates/              音声鮮度・レイアウト検査
-│   └── llm/                    ベンチマーク・ヘルスチェック
-├── samples/                    設定例・デモデータ
+│   └── llm/                    ベンチマーク・ヘルスチェック・判断ゲート
+├── samples/                    設定例・デモデータ・OpenCodeプラグイン例
 └── tests/                      unittest（45件・外部依存なし）
 ```
 
@@ -223,6 +238,10 @@ python samples/make_demo_audio.py
 python -m src.pipeline.gates.audio_freshness \
   --scenes samples/scenes.example.json --audio-dir samples/audio
 python -m src.pipeline.gates.visual_layout samples/layout.example.json
+
+# 判断モデル（System One エンドポイント）が動いている場合のみ
+python -m src.llm.decision_gate --endpoint http://127.0.0.1:8001 \
+  --state "この設計を批判的にレビューして改善案を出して"
 
 python -m unittest discover -s tests -v
 ```
